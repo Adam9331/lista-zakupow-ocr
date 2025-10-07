@@ -150,12 +150,12 @@
             console.log('========================');
 
             const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-            const parsed = [];
-            let current = null;
-            let id = Date.now();
+            const allIngredients = [];
+            let recipeTitle = 'Przepis ze screenshota';
+            let foundIngredientsSection = false;
 
-            // Słowa nagłówkowe (zawsze ignorujemy)
-            const headerWords = ['składniki', 'ingredients', 'przygotowanie', 'wykonanie', 'sposób', 'krok'];
+            // Słowa nagłówkowe
+            const headerWords = ['składniki', 'ingredients', 'przygotowanie', 'wykonanie', 'sposób'];
 
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i];
@@ -163,110 +163,90 @@
                 
                 console.log(`Linia ${i}: "${line}"`);
                 
-                // Ignoruj linie nagłówkowe
+                // Sprawdź czy to nagłówek "SKŁADNIKI"
                 if (headerWords.some(h => lower.includes(h))) {
-                    console.log('  -> Nagłówek, pomijam');
+                    console.log('  -> 📋 Sekcja składników rozpoczęta!');
+                    foundIngredientsSection = true;
                     continue;
                 }
                 
                 // Ignoruj bardzo krótkie (< 3 znaki)
                 if (line.length < 3) {
-                    console.log('  -> Za krótka, pomijam');
+                    console.log('  -> Za krótka');
                     continue;
                 }
                 
-                // Ignoruj linie z informacjami o kalorii/czasie (zawiera g dużymi liczbami typu 500kcal, 144)
-                if (/\d{3,}kcal|\d{2,}g\s*fat|\d{2,}\s*min/i.test(line)) {
-                    console.log('  -> Info o kaloriach/czasie, pomijam');
+                // Ignoruj linie z kalorii/makro (typu "500kcal, 40b, 14t, 57w")
+                if (/\d{3,}kcal|,\s*\d+[bt]|^\d+b\s*,/i.test(line)) {
+                    console.log('  -> Info makro/kalorie, pomijam');
                     continue;
                 }
 
-                // KLUCZOWE: Wykrywanie składników
-                // Składnik = ma myślnik NA POCZĄTKU lub zawiera jednostki miary
-                const startsWithDash = /^[\-–—\*•]/.test(line);
-                const hasUnit = /\d+\s*(g|kg|ml|l|dag|dkg|szt|sztuk|łyżk|łyżec|łyże|szklan|paczk|opakow|plaster|plastr|kromk)/i.test(line);
-                const hasSlash = /\d+\/\d+/.test(line); // ułamki jak 1/2, 3/4
-                
-                const isIngredient = startsWithDash || hasUnit || hasSlash;
+                // Jeśli nie znaleźliśmy jeszcze sekcji składników, to może to być tytuł
+                if (!foundIngredientsSection && line.length > 10 && line.length < 80 && !/\d{2,}g/.test(line)) {
+                    recipeTitle = line;
+                    console.log('  -> 🏷️ Tytuł przepisu');
+                    continue;
+                }
 
-                if (isIngredient) {
-                    // Oczyść składnik
-                    let ingredient = line
-                        .replace(/^[\-–—\*•\s]+/, '') // usuń myślniki i gwiazdki
-                        .replace(/^\d+[\.\)]\s*/, '') // usuń numerację typu "1. "
-                        .trim();
+                // KLUCZOWE: Po znalezieniu sekcji składników, KAŻDA linia to potencjalny składnik
+                if (foundIngredientsSection) {
+                    // Wykrywanie składnika:
+                    // 1. Ma jednostkę miary (g, kg, ml, łyżeczka, itp.)
+                    // 2. Ma liczbę + "g" na końcu (150g, 50g)
+                    // 3. Ma ułamek (1/2)
+                    // 4. Zawiera nawias z miarą ((2 łyżeczki))
                     
-                    // Sprawdź czy nie jest instrukcją gotowania
-                    const instructionWords = ['dodaj', 'wrzuć', 'wymieszaj', 'ugotuj', 'usmaż', 'pokrój', 'przygotuj', 'zagotuj', 'podgrzej', 'upiecz', 'odstaw', 'schłódź'];
-                    const isInstruction = instructionWords.some(w => ingredient.toLowerCase().startsWith(w));
+                    const hasUnit = /\d+\s*(g|kg|ml|l|dag|dkg|szt|sztuk|łyżk|łyżec|łyże|szklan|paczk|opakow|plaster|kromk)/i.test(line);
+                    const hasNumberG = /\d{2,}g/i.test(line); // 150g, 20g
+                    const hasSlash = /\d+\/\d+/.test(line);
+                    const hasMeasureInParens = /\([^)]*łyżec[^)]*\)/i.test(line);
+                    const startsWithDash = /^[\-–—\*•]/.test(line);
                     
-                    if (!isInstruction && ingredient.length >= 3) {
-                        if (!current) {
-                            // Spróbuj znaleźć tytuł w poprzednich liniach
-                            let title = 'Przepis ze screenshota';
-                            if (i > 0) {
-                                // Weź poprzednią dłuższą linię jako tytuł
-                                for (let j = i - 1; j >= 0; j--) {
-                                    const prevLine = lines[j];
-                                    if (prevLine.length > 10 && prevLine.length < 100 && 
-                                        !headerWords.some(h => prevLine.toLowerCase().includes(h))) {
-                                        title = prevLine;
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            current = { 
-                                id: id++, 
-                                title: title, 
-                                ingredients: [] 
-                            };
-                        }
+                    // Sprawdź czy NIE jest instrukcją
+                    const instructionWords = ['dodaj', 'wrzuć', 'wymieszaj', 'ugotuj', 'usmaż', 'pokrój', 'przygotuj', 'zagotuj', 'podgrzej', 'upiecz', 'odstaw'];
+                    const isInstruction = instructionWords.some(w => lower.startsWith(w));
+                    
+                    // Jeśli ma COKOLWIEK z powyższego i nie jest instrukcją - to składnik!
+                    if ((hasUnit || hasNumberG || hasSlash || hasMeasureInParens || startsWithDash) && !isInstruction) {
+                        // Oczyść składnik z myślników na początku
+                        let ingredient = line.replace(/^[\-–—\*•\s]+/, '').trim();
                         
                         console.log(`  -> ✅ SKŁADNIK: "${ingredient}"`);
-                        current.ingredients.push(ingredient);
+                        allIngredients.push(ingredient);
                     } else {
-                        console.log(`  -> Instrukcja lub za krótki, pomijam`);
+                        // Po sekcji składników, linie bez miar mogą być dodatkowymi składnikami typu "Przyprawy (imbir, czosnek)"
+                        // Sprawdź czy zawiera nawiasy z listą lub dwukropek
+                        if (/\([^)]+,/.test(line) || /:\s*[a-z]/.test(line)) {
+                            console.log(`  -> ✅ SKŁADNIK (z dodatkami): "${line}"`);
+                            allIngredients.push(line);
+                        } else {
+                            console.log(`  -> Nie wygląda na składnik (brak jednostek)`);
+                        }
                     }
                 } else {
-                    // To może być tytuł przepisu
-                    if (line.length > 10 && line.length < 100) {
-                        if (current && current.ingredients.length > 0) {
-                            console.log(`  -> Zapisuję poprzedni przepis (${current.ingredients.length} składników)`);
-                            parsed.push(current);
-                        }
-                        console.log(`  -> 📋 TYTUŁ: "${line}"`);
-                        current = { 
-                            id: id++, 
-                            title: line, 
-                            ingredients: [] 
-                        };
-                    } else {
-                        console.log(`  -> Nie pasuje do żadnej kategorii`);
-                    }
+                    console.log('  -> Jeszcze przed sekcją składników');
                 }
             }
 
-            // Dodaj ostatni przepis
-            if (current && current.ingredients.length > 0) {
-                console.log(`Zapisuję ostatni przepis (${current.ingredients.length} składników)`);
-                parsed.push(current);
-            }
+            console.log(`\n=== WYNIK ===`);
+            console.log(`Tytuł: ${recipeTitle}`);
+            console.log(`Składniki (${allIngredients.length}):`);
+            allIngredients.forEach(ing => console.log(`  - ${ing}`));
 
-            console.log(`\n=== WYNIK: ${parsed.length} przepisów ===`);
-            parsed.forEach((r, i) => {
-                console.log(`\nPrzepis ${i + 1}: ${r.title}`);
-                console.log(`Składniki (${r.ingredients.length}):`);
-                r.ingredients.forEach(ing => console.log(`  - ${ing}`));
-            });
-
-            if (parsed.length === 0) {
+            if (allIngredients.length === 0) {
                 const previewText = text.substring(0, 500);
-                showError(`Nie znaleziono składników.\n\nOCR rozpoznał:\n"${previewText}${text.length > 500 ? '...' : ''}"\n\nSprawdź konsolę przeglądarki (F12) aby zobaczyć szczegóły.`);
+                showError(`Nie znaleziono składników.\n\nOCR rozpoznał:\n"${previewText}${text.length > 500 ? '...' : ''}"\n\nUpewnij się, że screenshot zawiera sekcję "SKŁADNIKI".`);
                 return;
             }
 
-            recipes = parsed;
+            // Utwórz jeden przepis ze wszystkimi składnikami
+            recipes = [{
+                id: Date.now(),
+                title: recipeTitle,
+                ingredients: allIngredients
+            }];
+            
             renderRecipes();
         }
 
