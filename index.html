@@ -145,71 +145,124 @@
         async function processText(text) {
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            console.log('OCR Text:', text); // Debug
+            console.log('=== OCR SUROWY TEKST ===');
+            console.log(text);
+            console.log('========================');
 
             const lines = text.split('\n').map(l => l.trim()).filter(l => l);
             const parsed = [];
             let current = null;
             let id = Date.now();
 
-            // Słowa do ignorowania (tylko całe linie)
-            const ignoreLines = ['składniki', 'ingredients', 'przygotowanie', 'wykonanie', 'krok', 'sposób przygotowania'];
+            // Słowa nagłówkowe (zawsze ignorujemy)
+            const headerWords = ['składniki', 'ingredients', 'przygotowanie', 'wykonanie', 'sposób', 'krok'];
 
-            for (let line of lines) {
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i];
                 const lower = line.toLowerCase();
                 
-                // Ignoruj tylko dokładnie te słowa jako całą linię
-                if (ignoreLines.includes(lower)) continue;
+                console.log(`Linia ${i}: "${line}"`);
                 
-                // Ignoruj bardzo krótkie linie
-                if (line.length < 3) continue;
+                // Ignoruj linie nagłówkowe
+                if (headerWords.some(h => lower.includes(h))) {
+                    console.log('  -> Nagłówek, pomijam');
+                    continue;
+                }
+                
+                // Ignoruj bardzo krótkie (< 3 znaki)
+                if (line.length < 3) {
+                    console.log('  -> Za krótka, pomijam');
+                    continue;
+                }
+                
+                // Ignoruj linie z informacjami o kalorii/czasie (zawiera g dużymi liczbami typu 500kcal, 144)
+                if (/\d{3,}kcal|\d{2,}g\s*fat|\d{2,}\s*min/i.test(line)) {
+                    console.log('  -> Info o kaloriach/czasie, pomijam');
+                    continue;
+                }
 
-                // Sprawdź czy linia zawiera składnik
-                // Składnik to: liczba + jednostka LUB myślnik/gwiazdka na początku
-                const hasNumberAndUnit = /\d+\s*(g|kg|ml|l|szt|sztuk|łyżk|łyżka|łyżki|szklank|szklan|paczk|opakow)/i.test(line);
-                const hasMarker = /^[\-\*•]/.test(line);
-                const startsWithDash = line.startsWith('-');
+                // KLUCZOWE: Wykrywanie składników
+                // Składnik = ma myślnik NA POCZĄTKU lub zawiera jednostki miary
+                const startsWithDash = /^[\-–—\*•]/.test(line);
+                const hasUnit = /\d+\s*(g|kg|ml|l|dag|dkg|szt|sztuk|łyżk|łyżec|łyże|szklan|paczk|opakow|plaster|plastr|kromk)/i.test(line);
+                const hasSlash = /\d+\/\d+/.test(line); // ułamki jak 1/2, 3/4
                 
-                // Jeśli ma jednostkę miary lub myślnik - to składnik!
-                if (hasNumberAndUnit || hasMarker || startsWithDash) {
-                    // Oczyść składnik z markerów
-                    let ingredient = line.replace(/^[\-\*•\s]+/, '').trim();
+                const isIngredient = startsWithDash || hasUnit || hasSlash;
+
+                if (isIngredient) {
+                    // Oczyść składnik
+                    let ingredient = line
+                        .replace(/^[\-–—\*•\s]+/, '') // usuń myślniki i gwiazdki
+                        .replace(/^\d+[\.\)]\s*/, '') // usuń numerację typu "1. "
+                        .trim();
                     
-                    // Sprawdź czy nie jest instrukcją
-                    const isInstruction = /^(dodaj|wrzuć|wymieszaj|ugotuj|usmaż|pokrój|przygotuj|zagotuj|podgrzej|upiecz)/i.test(ingredient);
+                    // Sprawdź czy nie jest instrukcją gotowania
+                    const instructionWords = ['dodaj', 'wrzuć', 'wymieszaj', 'ugotuj', 'usmaż', 'pokrój', 'przygotuj', 'zagotuj', 'podgrzej', 'upiecz', 'odstaw', 'schłódź'];
+                    const isInstruction = instructionWords.some(w => ingredient.toLowerCase().startsWith(w));
                     
                     if (!isInstruction && ingredient.length >= 3) {
                         if (!current) {
+                            // Spróbuj znaleźć tytuł w poprzednich liniach
+                            let title = 'Przepis ze screenshota';
+                            if (i > 0) {
+                                // Weź poprzednią dłuższą linię jako tytuł
+                                for (let j = i - 1; j >= 0; j--) {
+                                    const prevLine = lines[j];
+                                    if (prevLine.length > 10 && prevLine.length < 100 && 
+                                        !headerWords.some(h => prevLine.toLowerCase().includes(h))) {
+                                        title = prevLine;
+                                        break;
+                                    }
+                                }
+                            }
+                            
                             current = { 
                                 id: id++, 
-                                title: 'Przepis ze screenshota', 
+                                title: title, 
                                 ingredients: [] 
                             };
                         }
+                        
+                        console.log(`  -> ✅ SKŁADNIK: "${ingredient}"`);
                         current.ingredients.push(ingredient);
+                    } else {
+                        console.log(`  -> Instrukcja lub za krótki, pomijam`);
                     }
-                } else if (line.length > 15 && line.length < 100 && !hasNumberAndUnit) {
-                    // To może być tytuł przepisu (dłuższa linia bez jednostek)
-                    if (current && current.ingredients.length > 0) {
-                        parsed.push(current);
+                } else {
+                    // To może być tytuł przepisu
+                    if (line.length > 10 && line.length < 100) {
+                        if (current && current.ingredients.length > 0) {
+                            console.log(`  -> Zapisuję poprzedni przepis (${current.ingredients.length} składników)`);
+                            parsed.push(current);
+                        }
+                        console.log(`  -> 📋 TYTUŁ: "${line}"`);
+                        current = { 
+                            id: id++, 
+                            title: line, 
+                            ingredients: [] 
+                        };
+                    } else {
+                        console.log(`  -> Nie pasuje do żadnej kategorii`);
                     }
-                    current = { 
-                        id: id++, 
-                        title: line, 
-                        ingredients: [] 
-                    };
                 }
             }
 
             // Dodaj ostatni przepis
             if (current && current.ingredients.length > 0) {
+                console.log(`Zapisuję ostatni przepis (${current.ingredients.length} składników)`);
                 parsed.push(current);
             }
 
-            // Jeśli nic nie znaleziono, pokaż surowy tekst do debugowania
+            console.log(`\n=== WYNIK: ${parsed.length} przepisów ===`);
+            parsed.forEach((r, i) => {
+                console.log(`\nPrzepis ${i + 1}: ${r.title}`);
+                console.log(`Składniki (${r.ingredients.length}):`);
+                r.ingredients.forEach(ing => console.log(`  - ${ing}`));
+            });
+
             if (parsed.length === 0) {
-                console.log('Nie znaleziono składników. Surowy tekst:', text);
-                showError('Nie znaleziono składników.\n\nRozpoznany tekst:\n' + text.substring(0, 200) + '...\n\nSpróbuj z lepszej jakości screenshotem.');
+                const previewText = text.substring(0, 500);
+                showError(`Nie znaleziono składników.\n\nOCR rozpoznał:\n"${previewText}${text.length > 500 ? '...' : ''}"\n\nSprawdź konsolę przeglądarki (F12) aby zobaczyć szczegóły.`);
                 return;
             }
 
