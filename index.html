@@ -145,51 +145,71 @@
         async function processText(text) {
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            const lines = text.split('\n').filter(l => l.trim());
+            console.log('OCR Text:', text); // Debug
+
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
             const parsed = [];
             let current = null;
             let id = Date.now();
 
-            const ignore = ['składniki', 'ingredients', 'przygotowanie', 'krok', 'step', 'czas', 'porcje'];
+            // Słowa do ignorowania (tylko całe linie)
+            const ignoreLines = ['składniki', 'ingredients', 'przygotowanie', 'wykonanie', 'krok', 'sposób przygotowania'];
 
             for (let line of lines) {
-                line = line.trim();
-                if (!line || line.length < 3) continue;
-
                 const lower = line.toLowerCase();
-                if (ignore.some(k => lower === k || lower.startsWith(k + ':'))) continue;
+                
+                // Ignoruj tylko dokładnie te słowa jako całą linię
+                if (ignoreLines.includes(lower)) continue;
+                
+                // Ignoruj bardzo krótkie linie
+                if (line.length < 3) continue;
 
-                const hasMarker = /^[\d\-\*•]/.test(line);
-                const couldBeTitle = !hasMarker && line.length > 10 && line.length < 100;
-
-                if (couldBeTitle) {
-                    if (current && current.ingredients.length > 0) {
-                        parsed.push(current);
-                    }
-                    current = { id: id++, title: line, ingredients: [] };
-                } else if (current || parsed.length === 0) {
-                    let ingredient = line.replace(/^[\d\-\*•\s]+/, '').trim();
-                    ingredient = ingredient.replace(/^\d+[\.\)]\s*/, '');
-
-                    const hasUnit = /\d+\s*(g|kg|ml|l|szt|łyżk|szklan)/i.test(ingredient);
-                    const isValid = ingredient.length >= 5 && ingredient.length <= 150;
-                    const notInstruction = !/wrzuć|dodaj|wymieszaj|ugotuj|usmaż|pokrój/i.test(ingredient);
-
-                    if ((hasUnit || hasMarker) && isValid && notInstruction) {
+                // Sprawdź czy linia zawiera składnik
+                // Składnik to: liczba + jednostka LUB myślnik/gwiazdka na początku
+                const hasNumberAndUnit = /\d+\s*(g|kg|ml|l|szt|sztuk|łyżk|łyżka|łyżki|szklank|szklan|paczk|opakow)/i.test(line);
+                const hasMarker = /^[\-\*•]/.test(line);
+                const startsWithDash = line.startsWith('-');
+                
+                // Jeśli ma jednostkę miary lub myślnik - to składnik!
+                if (hasNumberAndUnit || hasMarker || startsWithDash) {
+                    // Oczyść składnik z markerów
+                    let ingredient = line.replace(/^[\-\*•\s]+/, '').trim();
+                    
+                    // Sprawdź czy nie jest instrukcją
+                    const isInstruction = /^(dodaj|wrzuć|wymieszaj|ugotuj|usmaż|pokrój|przygotuj|zagotuj|podgrzej|upiecz)/i.test(ingredient);
+                    
+                    if (!isInstruction && ingredient.length >= 3) {
                         if (!current) {
-                            current = { id: id++, title: 'Przepis ze screenshota', ingredients: [] };
+                            current = { 
+                                id: id++, 
+                                title: 'Przepis ze screenshota', 
+                                ingredients: [] 
+                            };
                         }
                         current.ingredients.push(ingredient);
                     }
+                } else if (line.length > 15 && line.length < 100 && !hasNumberAndUnit) {
+                    // To może być tytuł przepisu (dłuższa linia bez jednostek)
+                    if (current && current.ingredients.length > 0) {
+                        parsed.push(current);
+                    }
+                    current = { 
+                        id: id++, 
+                        title: line, 
+                        ingredients: [] 
+                    };
                 }
             }
 
+            // Dodaj ostatni przepis
             if (current && current.ingredients.length > 0) {
                 parsed.push(current);
             }
 
+            // Jeśli nic nie znaleziono, pokaż surowy tekst do debugowania
             if (parsed.length === 0) {
-                showError('Nie znaleziono składników. Sprawdź czy screenshot zawiera listę składników.');
+                console.log('Nie znaleziono składników. Surowy tekst:', text);
+                showError('Nie znaleziono składników.\n\nRozpoznany tekst:\n' + text.substring(0, 200) + '...\n\nSpróbuj z lepszej jakości screenshotem.');
                 return;
             }
 
