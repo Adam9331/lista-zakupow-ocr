@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lista Zakupów AI - OCR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: pan-y;
+        }
+        .processing {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 min-h-screen">
+    <div class="max-w-6xl mx-auto p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6">
+            <!-- Header -->
+            <div class="text-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                    ✨ Lista Zakupów AI + OCR
+                </h1>
+                <p class="text-gray-600">Wgraj screenshot przepisu</p>
+            </div>
+
+            <!-- Upload Button -->
+            <div class="mb-6">
+                <label class="block w-full bg-gradient-to-r from-purple-500 to-indigo-500 active:from-purple-600 active:to-indigo-600 text-white font-bold py-6 px-6 rounded-xl text-center cursor-pointer shadow-lg">
+                    <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <span class="text-lg">📸 Wgraj Screenshot Przepisu</span>
+                    <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                </label>
+            </div>
+
+            <!-- Demo Button -->
+            <button onclick="loadDemo()" class="w-full bg-gradient-to-r from-blue-400 to-cyan-500 text-white font-bold py-4 rounded-xl mb-6 shadow-lg">
+                🍳 Załaduj Demo Przepisy
+            </button>
+
+            <!-- Progress -->
+            <div id="progress" class="hidden mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="relative">
+                        <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+                    </div>
+                    <p id="progressText" class="text-blue-700 font-bold text-lg text-center"></p>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="error" class="hidden mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+                <p class="text-red-700 font-bold">⚠️ Błąd</p>
+                <p id="errorText" class="text-red-600 text-sm mt-2"></p>
+            </div>
+
+            <!-- Recipes List -->
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">📋 Przepisy (<span id="recipeCount">0</span>)</h2>
+                <div id="recipesList" class="space-y-3"></div>
+            </div>
+
+            <!-- Generate Button -->
+            <button id="generateBtn" onclick="generateShoppingList()" disabled class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-4 rounded-xl mb-6 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                🛒 Wygeneruj Listę Zakupów
+            </button>
+
+            <!-- Shopping List -->
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">🛒 Lista Zakupów</h2>
+                <div id="shoppingList" class="bg-gray-50 rounded-xl p-4 min-h-32">
+                    <p class="text-center text-gray-400 py-8">Wybierz przepisy aby wygenerować listę</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let recipes = [];
+        let selectedRecipes = new Set();
+        let shoppingList = [];
+
+        function showProgress(text) {
+            document.getElementById('progress').classList.remove('hidden');
+            document.getElementById('progressText').textContent = text;
+            document.getElementById('error').classList.add('hidden');
+        }
+
+        function hideProgress() {
+            document.getElementById('progress').classList.add('hidden');
+        }
+
+        function showError(text) {
+            document.getElementById('error').classList.remove('hidden');
+            document.getElementById('errorText').textContent = text;
+            hideProgress();
+        }
+
+        async function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showProgress('📸 Wczytywanie obrazu...');
+
+            try {
+                showProgress('🔍 Rozpoznawanie tekstu (może potrwać 30-60 sekund)...');
+                
+                const { data: { text } } = await Tesseract.recognize(
+                    file,
+                    'eng+pol',
+                    {
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                const progress = Math.round(m.progress * 100);
+                                showProgress(`🔍 Rozpoznawanie: ${progress}%`);
+                            }
+                        }
+                    }
+                );
+
+                if (!text || text.trim().length < 10) {
+                    showError('Nie rozpoznano tekstu. Upewnij się, że screenshot zawiera wyraźny tekst przepisu.');
+                    return;
+                }
+
+                showProgress('🤖 AI przetwarza składniki...');
+                await processText(text);
+                hideProgress();
+
+            } catch (error) {
+                console.error('OCR Error:', error);
+                showError('Błąd OCR: ' + error.message + '\n\nSpróbuj z innym screenshotem lub użyj demo.');
+            }
+        }
+
+        async function processText(text) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const lines = text.split('\n').filter(l => l.trim());
+            const parsed = [];
+            let current = null;
+            let id = Date.now();
+
+            const ignore = ['składniki', 'ingredients', 'przygotowanie', 'krok', 'step', 'czas', 'porcje'];
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line || line.length < 3) continue;
+
+                const lower = line.toLowerCase();
+                if (ignore.some(k => lower === k || lower.startsWith(k + ':'))) continue;
+
+                const hasMarker = /^[\d\-\*•]/.test(line);
+                const couldBeTitle = !hasMarker && line.length > 10 && line.length < 100;
+
+                if (couldBeTitle) {
+                    if (current && current.ingredients.length > 0) {
+                        parsed.push(current);
+                    }
+                    current = { id: id++, title: line, ingredients: [] };
+                } else if (current || parsed.length === 0) {
+                    let ingredient = line.replace(/^[\d\-\*•\s]+/, '').trim();
+                    ingredient = ingredient.replace(/^\d+[\.\)]\s*/, '');
+
+                    const hasUnit = /\d+\s*(g|kg|ml|l|szt|łyżk|szklan)/i.test(ingredient);
+                    const isValid = ingredient.length >= 5 && ingredient.length <= 150;
+                    const notInstruction = !/wrzuć|dodaj|wymieszaj|ugotuj|usmaż|pokrój/i.test(ingredient);
+
+                    if ((hasUnit || hasMarker) && isValid && notInstruction) {
+                        if (!current) {
+                            current = { id: id++, title: 'Przepis ze screenshota', ingredients: [] };
+                        }
+                        current.ingredients.push(ingredient);
+                    }
+                }
+            }
+
+            if (current && current.ingredients.length > 0) {
+                parsed.push(current);
+            }
+
+            if (parsed.length === 0) {
+                showError('Nie znaleziono składników. Sprawdź czy screenshot zawiera listę składników.');
+                return;
+            }
+
+            recipes = parsed;
+            renderRecipes();
+        }
+
+        function renderRecipes() {
+            const container = document.getElementById('recipesList');
+            document.getElementById('recipeCount').textContent = recipes.length;
+
+            if (recipes.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-8">Brak przepisów</p>';
+                return;
+            }
+
+            container.innerHTML = recipes.map(recipe => `
+                <div onclick="toggleRecipe(${recipe.id})" 
+                     class="p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                         selectedRecipes.has(recipe.id) 
+                         ? 'border-purple-500 bg-purple-50 shadow-lg' 
+                         : 'border-gray-200 bg-white'
+                     }">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-gray-800 flex-1">${recipe.title}</h3>
+                        <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                            selectedRecipes.has(recipe.id) 
+                            ? 'border-purple-500 bg-purple-500' 
+                            : 'border-gray-300'
+                        }">
+                            ${selectedRecipes.has(recipe.id) ? '✓' : ''}
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">📋 ${recipe.ingredients.length} składników</p>
+                </div>
+            `).join('');
+
+            document.getElementById('generateBtn').disabled = selectedRecipes.size === 0;
+        }
+
+        function toggleRecipe(id) {
+            if (selectedRecipes.has(id)) {
+                selectedRecipes.delete(id);
+            } else {
+                selectedRecipes.add(id);
+            }
+            renderRecipes();
+        }
+
+        function generateShoppingList() {
+            const ingredients = new Map();
+
+            recipes
+                .filter(r => selectedRecipes.has(r.id))
+                .forEach(r => {
+                    r.ingredients.forEach(ing => {
+                        ingredients.set(ing, false);
+                    });
+                });
+
+            shoppingList = Array.from(ingredients.keys()).map((name, i) => ({
+                id: i,
+                name: name,
+                checked: false
+            }));
+
+            renderShoppingList();
+        }
+
+        function renderShoppingList() {
+            const container = document.getElementById('shoppingList');
+
+            if (shoppingList.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-8">Wybierz przepisy aby wygenerować listę</p>';
+                return;
+            }
+
+            const unchecked = shoppingList.filter(i => !i.checked).length;
+
+            container.innerHTML = `
+                <div class="space-y-2">
+                    ${shoppingList.map(item => `
+                        <div class="flex items-center justify-between p-3 rounded-lg ${
+                            item.checked ? 'bg-green-100 text-green-800 line-through' : 'bg-white text-gray-800'
+                        } shadow-md">
+                            <div class="flex items-center gap-3 flex-1">
+                                <button onclick="toggleItem(${item.id})" 
+                                        class="w-6 h-6 rounded border-2 flex items-center justify-center ${
+                                            item.checked ? 'border-green-500 bg-green-500' : 'border-gray-400'
+                                        }">
+                                    ${item.checked ? '✓' : ''}
+                                </button>
+                                <span class="flex-1 font-medium">${item.name}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="mt-4 pt-4 border-t-2 border-gray-200">
+                    <p class="text-center font-bold text-gray-700">
+                        🛒 ${unchecked} / ${shoppingList.length} do kupienia
+                    </p>
+                </div>
+            `;
+        }
+
+        function toggleItem(id) {
+            const item = shoppingList.find(i => i.id === id);
+            if (item) {
+                item.checked = !item.checked;
+                renderShoppingList();
+            }
+        }
+
+        function loadDemo() {
+            recipes = [
+                {
+                    id: 1,
+                    title: "Spaghetti Bolognese",
+                    ingredients: ["spaghetti 500g", "mięso mielone 300g", "pomidory 400g", "cebula 1 szt", "czosnek 2 ząbki"]
+                },
+                {
+                    id: 2,
+                    title: "Kurczak curry",
+                    ingredients: ["kurczak 600g", "mleko kokosowe 400ml", "pasta curry 2 łyżki", "ryż 300g"]
+                }
+            ];
+            selectedRecipes.clear();
+            renderRecipes();
+        }
+
+        // Initialize
+        renderRecipes();
+    </script>
+</body>
+</html>
