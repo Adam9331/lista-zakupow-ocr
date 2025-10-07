@@ -10,7 +10,6 @@
 <body class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 min-h-screen">
     <div class="max-w-6xl mx-auto p-4">
         <div class="bg-white rounded-2xl shadow-2xl p-6">
-            <!-- Header -->
             <div class="text-center mb-6">
                 <h1 class="text-3xl font-bold text-gray-800 mb-2">
                     🤖 Lista Zakupów AI (GPT-4)
@@ -18,10 +17,9 @@
                 <p class="text-gray-600">Inteligentne przetwarzanie przepisów z AI</p>
             </div>
 
-            <!-- API Key Setup -->
             <div id="apiSetup" class="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
                 <h3 class="font-bold text-blue-800 mb-3">🔑 Konfiguracja OpenAI API</h3>
-                <p class="text-sm text-blue-700 mb-3">Potrzebujesz klucza API z OpenAI aby używać GPT-4. <a href="https://platform.openai.com/api-keys" target="_blank" class="underline">Utwórz klucz tutaj</a></p>
+                <p class="text-sm text-blue-700 mb-3">Potrzebujesz klucza API z OpenAI. <a href="https://platform.openai.com/api-keys" target="_blank" class="underline">Utwórz klucz tutaj</a></p>
                 <input 
                     type="password" 
                     id="apiKey" 
@@ -31,26 +29,20 @@
                 <button onclick="saveApiKey()" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg">
                     💾 Zapisz Klucz API
                 </button>
-                <p class="text-xs text-gray-500 mt-2">Klucz jest zapisywany tylko lokalnie w przeglądarce</p>
             </div>
 
-            <!-- Upload Button -->
             <div class="mb-6">
-                <label id="uploadBtn" class="block w-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold py-6 px-6 rounded-xl text-center cursor-pointer shadow-lg opacity-50">
-                    <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                    </svg>
-                    <span class="text-lg">📸 Wgraj Screenshot (Najpierw ustaw API Key)</span>
-                    <input type="file" id="imageInput" accept="image/*" class="hidden" disabled>
+                <label for="imageInput" id="uploadLabel" class="block w-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold py-6 px-6 rounded-xl text-center cursor-pointer shadow-lg opacity-50">
+                    <div class="text-4xl mb-2">📸</div>
+                    <span id="uploadText">Wgraj Screenshot (Najpierw ustaw API Key)</span>
                 </label>
+                <input type="file" id="imageInput" accept="image/*" class="hidden" disabled>
             </div>
 
-            <!-- Demo Button -->
             <button onclick="loadDemo()" class="w-full bg-gradient-to-r from-blue-400 to-cyan-500 text-white font-bold py-4 rounded-xl mb-6 shadow-lg">
-                🍳 Załaduj Demo Przepisy
+                🍳 Załaduj Demo
             </button>
 
-            <!-- Progress -->
             <div id="progress" class="hidden mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
                 <div class="flex flex-col items-center gap-4">
                     <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
@@ -58,24 +50,20 @@
                 </div>
             </div>
 
-            <!-- Error -->
             <div id="error" class="hidden mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
                 <p class="text-red-700 font-bold">⚠️ Błąd</p>
                 <p id="errorText" class="text-red-600 text-sm mt-2"></p>
             </div>
 
-            <!-- Recipes List -->
             <div class="mb-6">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4">📋 Przepisy (<span id="recipeCount">0</span>)</h2>
                 <div id="recipesList" class="space-y-3"></div>
             </div>
 
-            <!-- Generate Button -->
             <button id="generateBtn" onclick="generateShoppingList()" disabled class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-4 rounded-xl mb-6 shadow-lg disabled:opacity-50">
                 🛒 Wygeneruj Listę Zakupów
             </button>
 
-            <!-- Shopping List -->
             <div>
                 <h2 class="text-2xl font-bold text-gray-800 mb-4">🛒 Lista Zakupów</h2>
                 <div id="shoppingList" class="bg-gray-50 rounded-xl p-4 min-h-32">
@@ -95,9 +83,18 @@
         if (apiKey) {
             document.getElementById('apiKey').value = apiKey;
             document.getElementById('apiSetup').classList.add('hidden');
-            document.getElementById('imageInput').disabled = false;
-            document.getElementById('uploadBtn').classList.remove('opacity-50');
-            document.getElementById('uploadBtn').onclick = () => document.getElementById('imageInput').click();
+            enableUpload();
+        }
+
+        function enableUpload() {
+            const input = document.getElementById('imageInput');
+            const label = document.getElementById('uploadLabel');
+            const text = document.getElementById('uploadText');
+            
+            input.disabled = false;
+            label.classList.remove('opacity-50');
+            label.classList.add('hover:opacity-90');
+            text.textContent = '📸 Wgraj Screenshot Przepisu';
         }
 
         function saveApiKey() {
@@ -108,13 +105,23 @@
             }
             localStorage.setItem('openai_api_key', apiKey);
             document.getElementById('apiSetup').classList.add('hidden');
-            document.getElementById('imageInput').disabled = false;
-            document.getElementById('uploadBtn').classList.remove('opacity-50');
-            document.getElementById('uploadBtn').onclick = () => document.getElementById('imageInput').click();
+            enableUpload();
             alert('✅ Klucz API zapisany!');
         }
 
-        document.getElementById('imageInput').addEventListener('change', handleImageUpload);
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            console.log('File selected:', file.name);
+            
+            if (!apiKey) {
+                showError('Najpierw ustaw klucz API!');
+                return;
+            }
+            
+            processImage(file);
+        });
 
         function showProgress(text) {
             document.getElementById('progress').classList.remove('hidden');
@@ -132,19 +139,11 @@
             hideProgress();
         }
 
-        async function handleImageUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (!apiKey) {
-                showError('Najpierw ustaw klucz API OpenAI!');
-                return;
-            }
-
+        async function processImage(file) {
             showProgress('📸 Wczytywanie obrazu...');
 
             try {
-                showProgress('🔍 OCR - Rozpoznawanie tekstu (30-60 sek)...');
+                showProgress('🔍 OCR - Rozpoznawanie tekstu...');
                 
                 const { data: { text } } = await Tesseract.recognize(
                     file,
@@ -164,7 +163,9 @@
                     return;
                 }
 
-                console.log('OCR TEXT:', text);
+                console.log('=== OCR TEXT ===');
+                console.log(text);
+                
                 showProgress('🤖 GPT-4 analizuje przepis...');
                 await processWithGPT(text);
 
@@ -172,6 +173,8 @@
                 console.error('Error:', error);
                 showError('Błąd: ' + error.message);
             }
+            
+            document.getElementById('imageInput').value = '';
         }
 
         async function processWithGPT(ocrText) {
@@ -186,29 +189,24 @@
                         model: 'gpt-4o-mini',
                         messages: [{
                             role: 'system',
-                            content: 'Jesteś asystentem kulinarnym. Twoje zadanie to wyciągnąć z tekstu przepisu TYLKO składniki potrzebne do kupienia. Zwróć odpowiedź TYLKO w formacie JSON bez żadnego dodatkowego tekstu.'
+                            content: 'Jesteś asystentem kulinarnym. Wyciągnij z tekstu składniki i zwróć JSON bez dodatkowego tekstu.'
                         }, {
                             role: 'user',
-                            content: `Z poniższego tekstu z OCR (może zawierać błędy) wyciągnij:
-1. Tytuł przepisu
-2. Listę składników (TYLKO składniki do kupienia, bez instrukcji, bez nagłówków)
+                            content: `Z tekstu OCR wyciągnij tytuł przepisu i składniki. Popraw błędy OCR (np. "1509" to "150g").
 
 Tekst OCR:
 ${ocrText}
 
-Zwróć TYLKO JSON w formacie:
+Zwróć TYLKO JSON:
 {
-  "title": "nazwa przepisu",
-  "ingredients": ["składnik 1", "składnik 2", ...]
+  "title": "nazwa",
+  "ingredients": ["składnik 1", "składnik 2"]
 }
 
 WAŻNE:
-- Popraw błędy OCR (np. "1509" to "150g", "ryzem" to "ryżem")
-- Usuń myślniki/kropki z początku składników
-- Każdy składnik w osobnej pozycji
-- NIE dodawaj instrukcji gotowania
-- NIE dodawaj nagłówków typu "Składniki:"
-- Składniki muszą zawierać ilość i nazwę (np. "150g ryby", "2 jajka")`
+- Usuń myślniki/kropki z początku
+- Każdy składnik osobno
+- BEZ instrukcji, BEZ nagłówków`
                         }],
                         temperature: 0.3,
                         max_tokens: 1000
@@ -217,24 +215,24 @@ WAŻNE:
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.error?.message || 'Błąd API OpenAI');
+                    throw new Error(error.error?.message || 'Błąd API');
                 }
 
                 const data = await response.json();
                 const content = data.choices[0].message.content.trim();
                 
-                console.log('GPT Response:', content);
+                console.log('=== GPT RESPONSE ===');
+                console.log(content);
 
-                // Parse JSON
                 const jsonMatch = content.match(/\{[\s\S]*\}/);
                 if (!jsonMatch) {
-                    throw new Error('GPT nie zwrócił poprawnego JSON');
+                    throw new Error('GPT nie zwrócił JSON');
                 }
 
                 const result = JSON.parse(jsonMatch[0]);
 
                 if (!result.ingredients || result.ingredients.length === 0) {
-                    showError('GPT nie znalazł składników w tekście.');
+                    showError('GPT nie znalazł składników.');
                     return;
                 }
 
@@ -249,7 +247,7 @@ WAŻNE:
 
             } catch (error) {
                 console.error('GPT Error:', error);
-                showError('Błąd GPT: ' + error.message + '\n\nSprawdź czy klucz API jest prawidłowy.');
+                showError('Błąd GPT: ' + error.message);
             }
         }
 
@@ -273,7 +271,7 @@ WAŻNE:
                         <h3 class="font-bold text-gray-800 flex-1">${recipe.title}</h3>
                         <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center ${
                             selectedRecipes.has(recipe.id) 
-                            ? 'border-purple-500 bg-purple-500' 
+                            ? 'border-purple-500 bg-purple-500 text-white' 
                             : 'border-gray-300'
                         }">
                             ${selectedRecipes.has(recipe.id) ? '✓' : ''}
@@ -334,7 +332,7 @@ WAŻNE:
                             <div class="flex items-center gap-3 flex-1">
                                 <button onclick="toggleItem(${item.id})" 
                                         class="w-6 h-6 rounded border-2 flex items-center justify-center ${
-                                            item.checked ? 'border-green-500 bg-green-500' : 'border-gray-400'
+                                            item.checked ? 'border-green-500 bg-green-500 text-white' : 'border-gray-400'
                                         }">
                                     ${item.checked ? '✓' : ''}
                                 </button>
